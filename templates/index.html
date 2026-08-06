@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixelForge — AI Semiconductor Image Restoration & Super-Resolution</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0b0f19;
+            --card-bg: rgba(18, 26, 44, 0.75);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --accent-cyan: #00f2fe;
+            --accent-blue: #4facfe;
+            --accent-purple: #7f00ff;
+            --accent-green: #10b981;
+            --accent-crimson: #f43f5e;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 242, 254, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(127, 0, 255, 0.08) 0%, transparent 40%);
+            background-attachment: fixed;
+            padding-bottom: 50px;
+        }
+
+        .header {
+            border-bottom: 1px solid var(--card-border);
+            backdrop-filter: blur(12px);
+            background: rgba(11, 15, 25, 0.8);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            padding: 16px 32px;
+        }
+
+        .header-container {
+            max-width: 1320px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo-group {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .logo-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
+            font-family: 'Outfit', sans-serif;
+            font-weight: 800;
+            font-size: 22px;
+            color: #fff;
+        }
+
+        .logo-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #ffffff, #a5b4fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34d399;
+            padding: 6px 14px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            background-color: #34d399;
+            border-radius: 50%;
+            box-shadow: 0 0 10px #34d399;
+            animation: pulse 1.8s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.25); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        .main-container {
+            max-width: 1320px;
+            margin: 32px auto 0 auto;
+            padding: 0 24px;
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 28px;
+        }
+
+        .sidebar-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(16px);
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .section-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            color: #e5e7eb;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .preset-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .preset-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .preset-card:hover, .preset-card.active {
+            background: rgba(0, 242, 254, 0.08);
+            border-color: var(--accent-cyan);
+            transform: translateX(4px);
+        }
+
+        .preset-thumb {
+            width: 48px;
+            height: 48px;
+            border-radius: 6px;
+            object-fit: cover;
+            background: #111;
+        }
+
+        .preset-info-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #f3f4f6;
+        }
+
+        .preset-info-desc {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .upload-area {
+            border: 2px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 24px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        .upload-area:hover {
+            border-color: var(--accent-cyan);
+            background: rgba(0, 242, 254, 0.04);
+        }
+
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .slider-control {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent-cyan);
+        }
+
+        .btn-restore {
+            width: 100%;
+            padding: 14px;
+            border-radius: 10px;
+            border: none;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+            color: #0b0f19;
+            font-family: 'Outfit', sans-serif;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0, 242, 254, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .btn-restore:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(0, 242, 254, 0.5);
+        }
+
+        .content-area {
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+        }
+
+        .metrics-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .metric-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(16px);
+            border-radius: 14px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .metric-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 26px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+        }
+
+        .comparison-wrapper {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(16px);
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Split Slider Container */
+        .image-split-container {
+            position: relative;
+            width: 100%;
+            height: 420px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: #05070c;
+            user-select: none;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        .split-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .split-image-before {
+            z-index: 1;
+        }
+
+        .split-image-after {
+            z-index: 2;
+            clip-path: polygon(50% 0, 100% 0, 100% 100%, 50% 100%);
+        }
+
+        .slider-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            width: 3px;
+            background: var(--accent-cyan);
+            z-index: 3;
+            cursor: ew-resize;
+            box-shadow: 0 0 12px var(--accent-cyan);
+        }
+
+        .slider-handle-button {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 38px;
+            height: 38px;
+            background: #0b0f19;
+            border: 2px solid var(--accent-cyan);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-cyan);
+            font-size: 14px;
+            box-shadow: 0 0 16px rgba(0, 242, 254, 0.6);
+        }
+
+        .split-labels {
+            position: absolute;
+            bottom: 14px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 4;
+            pointer-events: none;
+        }
+
+        .split-label-tag {
+            background: rgba(11, 15, 25, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .label-before { color: var(--accent-crimson); }
+        .label-after { color: #34d399; }
+
+        .three-panel-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .panel-box {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-img {
+            width: 100%;
+            aspect-ratio: 1/1;
+            object-fit: contain;
+            border-radius: 8px;
+            background: #000;
+        }
+
+        .panel-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .chart-card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(16px);
+            border-radius: 16px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .download-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #fff;
+        }
+
+        /* Loading spinner */
+        .loading-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(11, 15, 25, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            border-radius: 16px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .loading-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .spinner {
+            width: 44px;
+            height: 44px;
+            border: 3px solid rgba(0, 242, 254, 0.2);
+            border-top-color: var(--accent-cyan);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="header">
+        <div class="header-container">
+            <div class="logo-group">
+                <div class="logo-icon">PF</div>
+                <div>
+                    <div class="logo-title">PixelForge</div>
+                    <div class="logo-subtitle">SEMICON India Hackathon 2026 (KLA Track 1)</div>
+                </div>
+            </div>
+            <div class="status-pill">
+                <div class="pulse-dot"></div>
+                UNet-SR Active (Val PSNR: 28.36 dB)
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <div class="main-container">
+        
+        <!-- Sidebar Controls -->
+        <div class="sidebar-card">
+            <div class="section-title">📌 Preset Sample Images</div>
+            <div class="preset-grid">
+                <div class="preset-card active" onclick="selectPreset('wafer_lines', this)">
+                    <img src="/static/samples/wafer_lines_noisy.png" class="preset-thumb" alt="Wafer Lines">
+                    <div>
+                        <div class="preset-info-title">Wafer Interconnects</div>
+                        <div class="preset-info-desc">Speckle + Gaussian Noise</div>
+                    </div>
+                </div>
+                <div class="preset-card" onclick="selectPreset('contact_holes', this)">
+                    <img src="/static/samples/contact_holes_noisy.png" class="preset-thumb" alt="Contact Holes">
+                    <div>
+                        <div class="preset-info-title">Contact Hole Array</div>
+                        <div class="preset-info-desc">2x Spatial Downsampling</div>
+                    </div>
+                </div>
+                <div class="preset-card" onclick="selectPreset('defect_particle', this)">
+                    <img src="/static/samples/defect_particle_noisy.png" class="preset-thumb" alt="Defect Particle">
+                    <div>
+                        <div class="preset-info-title">Pattern Defect</div>
+                        <div class="preset-info-desc">Low SNR SEM Image</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="border-top: 1px solid var(--card-border); padding-top: 16px;">
+                <div class="section-title" style="margin-bottom: 12px;">📤 Upload Custom Microscopy Image</div>
+                <div class="upload-area" onclick="document.getElementById('file-input').click()">
+                    <div style="font-size: 28px; margin-bottom: 8px;">🔬</div>
+                    <div style="font-size: 13px; font-weight: 600; color: #e5e7eb;">Click to Upload Image</div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">PNG, JPG, TIF (128x128 or 256x256)</div>
+                    <input type="file" id="file-input" accept="image/*" style="display: none;" onchange="handleFileUpload(event)">
+                </div>
+            </div>
+
+            <div class="slider-group">
+                <div class="section-title">⚙️ Synthetic Degradation Simulation</div>
+                <div class="slider-control">
+                    <div class="slider-header">
+                        <span>Speckle Noise Level (η₁)</span>
+                        <span id="speckle-val">0.15</span>
+                    </div>
+                    <input type="range" id="speckle-range" min="0" max="0.4" step="0.02" value="0.15" oninput="document.getElementById('speckle-val').innerText = this.value">
+                </div>
+                <div class="slider-control">
+                    <div class="slider-header">
+                        <span>Additive Gaussian Noise (η₂)</span>
+                        <span id="gaussian-val">0.05</span>
+                    </div>
+                    <input type="range" id="gaussian-range" min="0" max="0.2" step="0.01" value="0.05" oninput="document.getElementById('gaussian-val').innerText = this.value">
+                </div>
+            </div>
+
+            <button class="btn-restore" onclick="runRestoration()">⚡ Restore & Super-Resolve Image</button>
+        </div>
+
+        <!-- Main Display Content -->
+        <div class="content-area">
+            
+            <!-- Quantitative Metrics Row -->
+            <div class="metrics-row">
+                <div class="metric-card">
+                    <div class="metric-label">PSNR Score</div>
+                    <div class="metric-value" id="metric-psnr">28.36 <span style="font-size: 14px; color: var(--text-muted);">dB</span></div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">SSIM Index</div>
+                    <div class="metric-value" id="metric-ssim" style="color: #34d399;">0.7787</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">MSE Error</div>
+                    <div class="metric-value" id="metric-mse" style="color: var(--accent-blue);">0.0014</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Inference Latency</div>
+                    <div class="metric-value" id="metric-latency" style="color: #a78bfa;">12.4 <span style="font-size: 14px; color: var(--text-muted);">ms</span></div>
+                </div>
+            </div>
+
+            <!-- Split Comparison Slider -->
+            <div class="comparison-wrapper" style="position: relative;">
+                
+                <div class="loading-overlay" id="loading-overlay">
+                    <div class="spinner"></div>
+                    <div style="font-size: 14px; font-weight: 600; color: var(--accent-cyan);">Running UNet-SR PyTorch Super-Resolution...</div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="section-title">🔍 Interactive Before / After Split Slider</div>
+                    <a id="download-link" href="#" download="restored_semiconductor_256x256.png" class="download-btn">
+                        ⬇️ Download Restored 256x256 Image
+                    </a>
+                </div>
+
+                <div class="image-split-container" id="split-container">
+                    <img id="img-corrupt" src="/static/samples/wafer_lines_noisy.png" class="split-image split-image-before" alt="Corrupt Input">
+                    <img id="img-restored" src="/static/samples/wafer_lines_gt.png" class="split-image split-image-after" alt="Restored Output">
+                    
+                    <div class="slider-handle" id="slider-handle">
+                        <div class="slider-handle-button">↔</div>
+                    </div>
+
+                    <div class="split-labels">
+                        <span class="split-label-tag label-before">CORRUPT INPUT (128x128)</span>
+                        <span class="split-label-tag label-after">UNet-SR RESTORED (256x256)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3-Panel Side-by-Side View -->
+            <div class="comparison-wrapper">
+                <div class="section-title">🖼️ Side-by-Side 3-View Comparison</div>
+                <div class="three-panel-grid">
+                    <div class="panel-box">
+                        <img id="panel-corrupt" src="/static/samples/wafer_lines_noisy.png" class="panel-img">
+                        <div class="panel-title">Corrupt Input (128x128)</div>
+                    </div>
+                    <div class="panel-box">
+                        <img id="panel-restored" src="/static/samples/wafer_lines_gt.png" class="panel-img">
+                        <div class="panel-title" style="color: #34d399;">Restored Output (256x256)</div>
+                    </div>
+                    <div class="panel-box">
+                        <img id="panel-gt" src="/static/samples/wafer_lines_gt.png" class="panel-img">
+                        <div class="panel-title" style="color: var(--accent-cyan);">Ground Truth (256x256)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Intensity Histogram -->
+            <div class="chart-card">
+                <div class="section-title">📊 Pixel Intensity Distribution Histogram (Preserving Non-Clipped Values)</div>
+                <div style="height: 220px; width: 100%;">
+                    <canvas id="histogramChart"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let currentSampleId = 'wafer_lines';
+        let customImageB64 = null;
+        let chartInstance = null;
+
+        // Split Slider Logic
+        const container = document.getElementById('split-container');
+        const afterImg = document.getElementById('img-restored');
+        const handle = document.getElementById('slider-handle');
+        let isDragging = false;
+
+        function setSliderPosition(x) {
+            const rect = container.getBoundingClientRect();
+            let pos = (x - rect.left) / rect.width;
+            pos = Math.max(0, Math.min(1, pos));
+            const percentage = pos * 100;
+            afterImg.style.clipPath = `polygon(${percentage}% 0, 100% 0, 100% 100%, ${percentage}% 100%)`;
+            handle.style.left = `${percentage}%`;
+        }
+
+        container.addEventListener('mousedown', (e) => { isDragging = true; setSliderPosition(e.clientX); });
+        window.addEventListener('mouseup', () => { isDragging = false; });
+        window.addEventListener('mousemove', (e) => { if (isDragging) setSliderPosition(e.clientX); });
+        
+        container.addEventListener('touchstart', (e) => { isDragging = true; setSliderPosition(e.touches[0].clientX); });
+        window.addEventListener('touchend', () => { isDragging = false; });
+        window.addEventListener('touchmove', (e) => { if (isDragging) setSliderPosition(e.touches[0].clientX); });
+
+        function selectPreset(id, el) {
+            document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+            currentSampleId = id;
+            customImageB64 = null;
+            runRestoration();
+        }
+
+        function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                customImageB64 = evt.target.result;
+                currentSampleId = null;
+                document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
+                runRestoration();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function runRestoration() {
+            document.getElementById('loading-overlay').classList.add('active');
+            
+            const payload = {
+                sample_id: currentSampleId,
+                image_b64: customImageB64,
+                speckle: parseFloat(document.getElementById('speckle-range').value),
+                gaussian: parseFloat(document.getElementById('gaussian-range').value)
+            };
+
+            fetch('/api/restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                document.getElementById('loading-overlay').classList.remove('active');
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                // Update Images
+                document.getElementById('img-corrupt').src = data.corrupt_b64;
+                document.getElementById('img-restored').src = data.restored_b64;
+                document.getElementById('panel-corrupt').src = data.corrupt_b64;
+                document.getElementById('panel-restored').src = data.restored_b64;
+                
+                if (data.gt_b64) {
+                    document.getElementById('panel-gt').src = data.gt_b64;
+                } else {
+                    document.getElementById('panel-gt').src = data.corrupt_b64;
+                }
+
+                document.getElementById('download-link').href = data.restored_b64;
+
+                // Update Metrics
+                document.getElementById('metric-psnr').innerHTML = `${data.psnr} <span style="font-size: 14px; color: var(--text-muted);">dB</span>`;
+                document.getElementById('metric-ssim').innerText = data.ssim;
+                document.getElementById('metric-mse').innerText = data.mse;
+                document.getElementById('metric-latency').innerHTML = `${data.latency_ms} <span style="font-size: 14px; color: var(--text-muted);">ms</span>`;
+
+                // Render Chart
+                renderHistogramChart(data.histogram);
+            })
+            .catch(err => {
+                document.getElementById('loading-overlay').classList.remove('active');
+                console.error(err);
+            });
+        }
+
+        function renderHistogramChart(hist) {
+            const ctx = document.getElementById('histogramChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            const datasets = [
+                {
+                    label: 'Corrupt Input y (Noisy)',
+                    data: hist.corrupt,
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.15)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                },
+                {
+                    label: 'Restored Output x̂ (UNet-SR)',
+                    data: hist.restored,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                }
+            ];
+
+            if (hist.gt && hist.gt.length > 0) {
+                datasets.push({
+                    label: 'Ground Truth x',
+                    data: hist.gt,
+                    borderColor: '#00f2fe',
+                    backgroundColor: 'rgba(0, 242, 254, 0.1)',
+                    borderWidth: 1.5,
+                    borderDash: [4, 4],
+                    fill: false,
+                    tension: 0.3
+                });
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: hist.bins,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#9ca3af', font: { family: 'Inter', size: 11 } } }
+                    },
+                    scales: {
+                        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af', font: { size: 10 } } },
+                        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#9ca3af', font: { size: 10 } } }
+                    }
+                }
+            });
+        }
+
+        // Initialize on load
+        window.onload = function() {
+            runRestoration();
+        };
+    </script>
+</body>
+</html>
