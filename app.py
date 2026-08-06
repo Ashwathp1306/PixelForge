@@ -2,29 +2,22 @@ import os
 import io
 import time
 import base64
-import torch
-import torch.nn.functional as F
 import numpy as np
 from PIL import Image, ImageDraw
 from flask import Flask, render_template, request, jsonify
-
-from models.builder import build_model
-from utils import calculate_psnr, calculate_ssim_tensor
+import onnxruntime as ort
+from skimage.metrics import structural_similarity as ssim_metric
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', 'best_unet.pth')
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', 'unet.onnx')
+ort_session = None
 
-print(f"[PixelForge] Loading model on device: {DEVICE}")
-model = build_model('unet', in_channels=1, out_channels=1, base_channels=64).to(DEVICE)
 if os.path.exists(MODEL_PATH):
-    ckpt = torch.load(MODEL_PATH, map_location=DEVICE, weights_only=False)
-    model.load_state_dict(ckpt['model_state_dict'])
-    print("[PixelForge] Loaded checkpoint best_unet.pth successfully!")
+    print(f"[PixelForge] Loading ONNX model from {MODEL_PATH}")
+    ort_session = ort.InferenceSession(MODEL_PATH)
 else:
-    print("[PixelForge] Warning: Checkpoint file not found. Running with initialized weights.")
-model.eval()
+    print("[PixelForge] Warning: ONNX model not found! Inference will fail.")
 
 SAMPLES_DIR = os.path.join(os.path.dirname(__file__), 'static', 'samples')
 os.makedirs(SAMPLES_DIR, exist_ok=True)
@@ -89,6 +82,12 @@ def array_to_base64(arr_2d):
     img.save(buf, format='PNG')
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode('utf-8')
 
+def calculate_psnr(img1, img2):
+    mse = np.mean((img1 - img2) ** 2)
+    if mse == 0:
+        return float('inf')
+    return 20 * np.log10(1.0 / np.sqrt(mse))
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -127,33 +126,31 @@ def restore():
     if noisy_arr is None:
         return jsonify({'error': 'No valid image input provided'}), 400
 
-    if noisy_arr.ndim == 2:
-        noisy_tensor = torch.from_numpy(noisy_arr).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
-    elif noisy_arr.ndim == 3:
-        noisy_tensor = torch.from_numpy(noisy_arr[:, :, 0]).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
+    noisy_input = noisy_arr[np.newaxis, np.newaxis, :, :].astype(np.float32)
+    
+    if ort_session is not None:
+        outputs = ort_session.run(None, {'input': noisy_input})
+        restored_arr = outputs[0][0, 0]
+    else:
+        restored_arr = np.zeros((256, 256), dtype=np.float32)
 
-    with torch.no_grad():
-        restored_tensor = model(noisy_tensor)
-
-    restored_arr = restored_tensor[0, 0].cpu().numpy()
     restored_arr_clamped = np.clip(restored_arr, 0.0, 1.0)
     
-    noisy_tensor_upsampled = F.interpolate(noisy_tensor, size=(256, 256), mode='bilinear', align_corners=False)
-    noisy_up_arr = noisy_tensor_upsampled[0, 0].cpu().numpy()
+    noisy_img_up = Image.fromarray(np.clip(noisy_arr * 255.0, 0, 255).astype(np.uint8)).resize((256, 256), Image.BILINEAR)
+    noisy_up_arr = np.array(noisy_img_up).astype(np.float32) / 255.0
     
     psnr_val = 0.0
     ssim_val = 0.0
     mse_val = 0.0
     
     if gt_arr is not None:
-        gt_tensor = torch.from_numpy(gt_arr).unsqueeze(0).unsqueeze(0).float().to(DEVICE)
-        psnr_val = round(calculate_psnr(restored_tensor, gt_tensor), 2)
-        ssim_val = round(calculate_ssim_tensor(restored_tensor, gt_tensor), 4)
-        mse_val = round(float(F.mse_loss(torch.clamp(restored_tensor, 0.0, 1.0), gt_tensor).item()), 6)
+        psnr_val = round(calculate_psnr(restored_arr_clamped, gt_arr), 2)
+        ssim_val = round(ssim_metric(restored_arr_clamped, gt_arr, data_range=1.0), 4)
+        mse_val = round(float(np.mean((restored_arr_clamped - gt_arr)**2)), 6)
     else:
-        psnr_val = round(calculate_psnr(restored_tensor, noisy_tensor_upsampled), 2)
-        ssim_val = round(calculate_ssim_tensor(restored_tensor, noisy_tensor_upsampled), 4)
-        mse_val = round(float(F.mse_loss(torch.clamp(restored_tensor, 0.0, 1.0), torch.clamp(noisy_tensor_upsampled, 0.0, 1.0)).item()), 6)
+        psnr_val = round(calculate_psnr(restored_arr_clamped, noisy_up_arr), 2)
+        ssim_val = round(ssim_metric(restored_arr_clamped, noisy_up_arr, data_range=1.0), 4)
+        mse_val = round(float(np.mean((restored_arr_clamped - noisy_up_arr)**2)), 6)
 
     corrupt_flat = noisy_arr.ravel().tolist()
     restored_flat = restored_arr.ravel().tolist()
