@@ -3,76 +3,25 @@ import io
 import time
 import base64
 import numpy as np
-from PIL import Image, ImageDraw
-from flask import Flask, render_template, request, jsonify
+from PIL import Image
+from flask import Flask, request, jsonify
 import onnxruntime as ort
 from skimage.metrics import structural_similarity as ssim_metric
 
-app = Flask(__name__, static_folder='static', template_folder='templates')
+# We don't need static or templates here, Vercel's CDN handles them!
+app = Flask(__name__)
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'checkpoints', 'unet.onnx')
+# Root directory of the repository (api/ is one level deep)
+ROOT_DIR = os.path.dirname(os.path.dirname(__file__))
+MODEL_PATH = os.path.join(ROOT_DIR, 'checkpoints', 'unet.onnx')
+SAMPLES_DIR = os.path.join(ROOT_DIR, 'public', 'static', 'samples')
+
 ort_session = None
-
 if os.path.exists(MODEL_PATH):
     print(f"[PixelForge] Loading ONNX model from {MODEL_PATH}")
     ort_session = ort.InferenceSession(MODEL_PATH)
 else:
     print("[PixelForge] Warning: ONNX model not found! Inference will fail.")
-
-SAMPLES_DIR = os.path.join(os.path.dirname(__file__), 'static', 'samples')
-os.makedirs(SAMPLES_DIR, exist_ok=True)
-
-def generate_preset_samples():
-    """Generates synthetic semiconductor pattern GT & Corrupt pairs for instant demo."""
-    presets = [
-        ('wafer_lines', 'Wafer Interconnect Lines'),
-        ('contact_holes', 'Vias & Contact Hole Array'),
-        ('defect_particle', 'Pattern Defect Particle')
-    ]
-    for name, title in presets:
-        gt_path = os.path.join(SAMPLES_DIR, f"{name}_gt.png")
-        noisy_path = os.path.join(SAMPLES_DIR, f"{name}_noisy.png")
-        raw_gt_path = os.path.join(SAMPLES_DIR, f"{name}_gt_raw.npy")
-        raw_noisy_path = os.path.join(SAMPLES_DIR, f"{name}_noisy_raw.npy")
-
-        if not os.path.exists(gt_path) or not os.path.exists(raw_noisy_path):
-            img = Image.new('L', (256, 256), color=35)
-            draw = ImageDraw.Draw(img)
-            if name == 'wafer_lines':
-                for y in range(24, 236, 24):
-                    draw.line([(20, y), (236, y)], fill=225, width=7)
-                for x in range(36, 220, 36):
-                    draw.line([(x, 30), (x, 226)], fill=175, width=4)
-            elif name == 'contact_holes':
-                for r in range(36, 220, 44):
-                    for c in range(36, 220, 44):
-                        draw.ellipse([c-12, r-12, c+12, r+12], fill=240)
-            else:
-                draw.rectangle([45, 45, 211, 211], outline=190, width=9)
-                draw.ellipse([110, 110, 146, 146], fill=255)
-            
-            arr = np.array(img).astype(np.float32) / 255.0
-            
-            # Multiplicative speckle noise (eta1)
-            speckle = np.random.normal(0, 0.18, arr.shape).astype(np.float32)
-            y_speckle = arr + arr * speckle
-            
-            # Downsample 2x to 128x128
-            lr_img = Image.fromarray(np.clip(y_speckle * 255.0, 0, 255).astype(np.uint8)).resize((128, 128), Image.BILINEAR)
-            lr_arr = np.array(lr_img).astype(np.float32) / 255.0
-            
-            # Additive Gaussian noise (eta2)
-            gaussian = np.random.normal(0, 0.08, lr_arr.shape).astype(np.float32)
-            corrupt = lr_arr + gaussian
-
-            img.save(gt_path)
-            corrupt_disp = Image.fromarray(np.clip(corrupt * 255.0, 0, 255).astype(np.uint8))
-            corrupt_disp.save(noisy_path)
-            
-            np.save(raw_gt_path, arr)
-            np.save(raw_noisy_path, corrupt)
-
-generate_preset_samples()
 
 def array_to_base64(arr_2d):
     """Converts a 2D float array in range [0, 1] to base64 PNG data URL."""
@@ -87,10 +36,6 @@ def calculate_psnr(img1, img2):
     if mse == 0:
         return float('inf')
     return 20 * np.log10(1.0 / np.sqrt(mse))
-
-@app.route('/')
-def index():
-    return render_template('index.html')
 
 @app.route('/api/restore', methods=['POST'])
 def restore():
@@ -179,7 +124,4 @@ def restore():
         }
     })
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    print(f"[PixelForge] Web App starting on http://127.0.0.1:{port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+# Vercel relies on the 'app' variable being accessible.
