@@ -1,8 +1,13 @@
 venv/
 data/train/
+data/val/
 data/sample_dataset/
-checkpoints/
+checkpoints/*.pth
+checkpoints/*.data
+checkpoints/*.onnx.data
 __pycache__/
 *.pyc
 .DS_Store
 runs/
+*.zip
+*.lnk

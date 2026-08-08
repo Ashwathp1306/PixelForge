@@ -4,8 +4,8 @@ from .esrgan import LightweightESRGAN
 
 def build_model(
     model_name: str = "unet",
-    in_channels: int = 3,
-    out_channels: int = 3,
+    in_channels: int = 1,
+    out_channels: int = 1,
     base_channels: int = 64
 ) -> nn.Module:
     """

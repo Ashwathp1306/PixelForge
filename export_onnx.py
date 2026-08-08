@@ -1,6 +1,12 @@
-import torch
+import sys
 import os
+import torch
 from models.builder import build_model
+
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
 
 def main():
     device = torch.device('cpu')
@@ -28,11 +34,12 @@ def main():
         dummy_input, 
         onnx_path, 
         export_params=True,
-        opset_version=14,
+        opset_version=18,
         do_constant_folding=True,
         input_names=['input'],
         output_names=['output'],
-        dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}}
+        dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}},
+        dynamo=False
     )
     print("Export complete!")
 

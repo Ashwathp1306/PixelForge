@@ -1,0 +1,12 @@
+# Development and Training Requirements
+# Do NOT deploy this file to Vercel, use it only for local training or in Colab
+torch>=2.0.0
+torchvision>=0.15.0
+numpy
+pillow
+matplotlib
+tensorboard
+onnx
+onnxscript
+scikit-image
+tqdm

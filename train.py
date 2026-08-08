@@ -65,9 +65,14 @@ def validate(model, loader, criterion, device):
     return val_loss, val_psnr, val_ssim
 
 def main():
+    default_gt = "data/train/GT" if os.path.exists("data/train/GT") else "/kaggle/input/datasets/ashwath1306/dataset/train/GT"
+    default_noisy = "data/train/NoisyLR" if os.path.exists("data/train/NoisyLR") else "/kaggle/input/datasets/ashwath1306/dataset/train/NoisyLR"
+    default_ckpt = "checkpoints" if not os.path.exists("/kaggle") else "/kaggle/working/checkpoints"
+    default_log = "runs" if not os.path.exists("/kaggle") else "/kaggle/working/runs"
+
     parser = argparse.ArgumentParser(description="PixelForge - PyTorch Image Restoration Training Pipeline")
-    parser.add_argument("--gt_dir", type=str, default="data/train/GT", help="Path to GT images/npy folder")
-    parser.add_argument("--noisy_dir", type=str, default="data/train/NoisyLR", help="Path to Noisy LR images/npy folder")
+    parser.add_argument("--gt_dir", type=str, default=default_gt, help="Path to GT images/npy folder")
+    parser.add_argument("--noisy_dir", type=str, default=default_noisy, help="Path to Noisy LR images/npy folder")
     parser.add_argument("--gt_val_dir", type=str, default=None, help="Optional separate GT val folder")
     parser.add_argument("--noisy_val_dir", type=str, default=None, help="Optional separate Noisy LR val folder")
     parser.add_argument("--val_split", type=float, default=0.1, help="Fraction of dataset to use for validation if val_dir not specified")
@@ -86,8 +91,8 @@ def main():
     parser.add_argument("--use_perceptual", action="store_true", help="Enable VGG perceptual loss")
     parser.add_argument("--norm_type", type=str, default="none", choices=["none", "zscore", "minmax"], help="LR normalization type")
 
-    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints", help="Directory to save model checkpoints")
-    parser.add_argument("--log_dir", type=str, default="runs", help="TensorBoard log directory")
+    parser.add_argument("--checkpoint_dir", type=str, default=default_ckpt, help="Directory to save model checkpoints")
+    parser.add_argument("--log_dir", type=str, default=default_log, help="TensorBoard log directory")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -134,16 +139,36 @@ def main():
     writer = SummaryWriter(log_dir=os.path.join(args.log_dir, f"{args.model_name}_{int(time.time())}"))
     
     csv_log_path = os.path.join(args.checkpoint_dir, f"metrics_{args.model_name}.csv")
-    csv_file = open(csv_log_path, mode='w', newline='')
-    csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(["Epoch", "Train Loss", "Val Loss", "Val PSNR (dB)", "Val SSIM", "LR"])
+    
+    # Checkpoint Auto-Detection and Resumption
+    start_epoch = 1
+    best_val_loss = float("inf")
+    latest_checkpoint_path = os.path.join(args.checkpoint_dir, f"latest_{args.model_name}.pth")
+    
+    if os.path.exists(latest_checkpoint_path):
+        print(f"Found existing checkpoint at {latest_checkpoint_path}. Resuming training...")
+        checkpoint = torch.load(latest_checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        if "scheduler_state_dict" in checkpoint:
+            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        start_epoch = checkpoint["epoch"] + 1
+        best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+        print(f"Resumed from epoch {start_epoch - 1}. Best Val Loss so far: {best_val_loss:.4f}")
+        
+        csv_file = open(csv_log_path, mode='a', newline='')
+        csv_writer = csv.writer(csv_file)
+    else:
+        print("No checkpoint found. Starting training from epoch 1.")
+        csv_file = open(csv_log_path, mode='w', newline='')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(["Epoch", "Train Loss", "Val Loss", "Val PSNR (dB)", "Val SSIM", "LR"])
 
-    best_val_psnr = -float("inf")
-
-    print(f"Starting training for {args.epochs} epochs...")
+    end_epoch = args.epochs if args.epochs >= start_epoch else (start_epoch + args.epochs - 1)
+    print(f"Training from epoch {start_epoch} to {end_epoch} (total target epochs: {end_epoch})...")
     start_time = time.time()
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, end_epoch + 1):
         train_loss, train_pixel, train_ssim = train_epoch(model, train_loader, criterion, optimizer, device)
         val_loss, val_psnr, val_ssim = validate(model, val_loader, criterion, device)
         
@@ -169,25 +194,33 @@ def main():
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
+            "val_loss": float(val_loss),
+            "best_val_loss": float(best_val_loss),
             "val_psnr": float(val_psnr),
             "val_ssim": float(val_ssim)
         }, latest_path)
+        print(f"Saved latest checkpoint to: {latest_path}")
 
-        if val_psnr > best_val_psnr:
-            best_val_psnr = val_psnr
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
             best_path = os.path.join(args.checkpoint_dir, f"best_{args.model_name}.pth")
             torch.save({
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict(),
+                "val_loss": float(val_loss),
+                "best_val_loss": float(best_val_loss),
                 "val_psnr": float(val_psnr),
                 "val_ssim": float(val_ssim)
             }, best_path)
-            print(f"  -> Saved new best checkpoint to {best_path} (PSNR: {val_psnr:.2f} dB)")
+            print(f"  -> Saved new best checkpoint to: {best_path} (Val Loss: {val_loss:.4f})")
 
     csv_file.close()
     writer.close()
     elapsed = time.time() - start_time
-    print(f"\nTraining completed in {elapsed:.1f}s! Best Validation PSNR: {best_val_psnr:.2f} dB")
+    print(f"\nTraining completed in {elapsed:.1f}s! Best Validation Loss: {best_val_loss:.4f}")
 
 if __name__ == "__main__":
     main()

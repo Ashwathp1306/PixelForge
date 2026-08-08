@@ -89,12 +89,15 @@ def evaluate_model(args):
     print("="*50 + "\n")
 
 def main():
+    default_gt = "data/train/GT" if os.path.exists("data/train/GT") else "data/sample_dataset/val/gt"
+    default_noisy = "data/train/NoisyLR" if os.path.exists("data/train/NoisyLR") else "data/sample_dataset/val/noisy"
+
     parser = argparse.ArgumentParser(description="Evaluate Image Restoration Model")
-    parser.add_argument("--gt_val_dir", type=str, default="data/sample_dataset/val/gt")
-    parser.add_argument("--noisy_val_dir", type=str, default="data/sample_dataset/val/noisy")
+    parser.add_argument("--gt_val_dir", type=str, default=default_gt)
+    parser.add_argument("--noisy_val_dir", type=str, default=default_noisy)
     parser.add_argument("--model_name", type=str, default="unet", choices=["unet", "esrgan"])
     parser.add_argument("--checkpoint_path", type=str, default="checkpoints/best_unet.pth")
-    parser.add_argument("--channels", type=int, default=3, choices=[1, 3])
+    parser.add_argument("--channels", type=int, default=1, choices=[1, 3])
     parser.add_argument("--norm_type", type=str, default="none", choices=["none", "zscore", "minmax"])
     parser.add_argument("--output_dir", type=str, default="eval_results")
     args = parser.parse_args()
